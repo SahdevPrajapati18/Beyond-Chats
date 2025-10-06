@@ -151,49 +151,66 @@ export async function processPdfForRag(pdfUrl, fileName) {
   }
 }
 
-// Enhanced text extraction with page tracking
+// Enhanced text extraction with page tracking (reusing from RAG system)
 async function extractTextWithPages(pdfUrl) {
   return new Promise((resolve, reject) => {
+    console.log('Loading PDF.js for text extraction...');
+
     const script = document.createElement('script');
     script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js';
     script.onload = async () => {
       try {
+        console.log('PDF.js loaded, extracting text...');
+
         const pdfjsLib = window['pdfjs-dist/build/pdf'];
 
         // Load PDF
         const loadingTask = pdfjsLib.getDocument(pdfUrl);
         const pdf = await loadingTask.promise;
 
+        console.log(`PDF loaded with ${pdf.numPages} pages`);
+
         const pages = [];
         const totalPages = pdf.numPages;
 
         // Extract text from each page
         for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
-          const page = await pdf.getPage(pageNum);
-          const textContent = await page.getTextContent();
+          try {
+            console.log(`Extracting text from page ${pageNum}/${totalPages}`);
+            const page = await pdf.getPage(pageNum);
+            const textContent = await page.getTextContent();
 
-          const pageText = textContent.items
-            .map(item => item.str)
-            .join(' ')
-            .trim();
+            const pageText = textContent.items
+              .map(item => item.str)
+              .join(' ')
+              .trim();
 
-          if (pageText) {
-            pages.push({
-              pageNumber: pageNum,
-              text: pageText,
-              wordCount: pageText.split(' ').length
-            });
+            if (pageText) {
+              pages.push({
+                pageNumber: pageNum,
+                text: pageText,
+                wordCount: pageText.split(' ').length
+              });
+            }
+          } catch (pageError) {
+            console.error(`Error extracting page ${pageNum}:`, pageError);
           }
         }
 
+        console.log(`Successfully extracted ${pages.length} pages of text`);
         resolve(pages);
 
       } catch (error) {
+        console.error('Error in PDF text extraction:', error);
         reject(error);
       }
     };
 
-    script.onerror = () => reject(new Error('Failed to load PDF.js'));
+    script.onerror = () => {
+      console.error('Failed to load PDF.js');
+      reject(new Error('Failed to load PDF.js'));
+    };
+
     document.head.appendChild(script);
   });
 }
@@ -224,32 +241,57 @@ export function searchRelevantChunks(query, documents, topK = 3) {
 
 // Generate citation from chunk
 export function generateCitation(chunk, query) {
-  // Extract 2-3 line snippet around relevant content
-  const sentences = chunk.content.split(/[.!?]+/).filter(s => s.trim().length > 10);
+  try {
+    console.log('Generating citation for chunk:', chunk.id, 'query:', query);
 
-  // Find sentences most relevant to the query (simple keyword matching)
-  const queryWords = query.toLowerCase().split(' ').filter(w => w.length > 3);
+    // Extract 2-3 line snippet around relevant content
+    const sentences = chunk.content.split(/[.!?]+/).filter(s => s.trim().length > 10);
 
-  let bestSentences = sentences;
-  if (queryWords.length > 0) {
-    // Score sentences by keyword matches
-    const scoredSentences = sentences.map(sentence => {
-      const sentenceWords = sentence.toLowerCase();
-      const score = queryWords.reduce((acc, word) => {
-        return acc + (sentenceWords.includes(word) ? 1 : 0);
-      }, 0);
-      return { sentence, score };
-    });
+    if (sentences.length === 0) {
+      console.warn('No sentences found in chunk for citation');
+      return {
+        pageNumber: chunk.startPage || 1,
+        snippet: chunk.content.substring(0, 150) + '...',
+        documentName: chunk.documentName || 'Unknown Document'
+      };
+    }
 
-    scoredSentences.sort((a, b) => b.score - a.score);
-    bestSentences = scoredSentences.slice(0, 3).map(item => item.sentence);
+    // Find sentences most relevant to the query (simple keyword matching)
+    const queryWords = query.toLowerCase().split(' ').filter(w => w.length > 3);
+
+    let bestSentences = sentences;
+    if (queryWords.length > 0) {
+      // Score sentences by keyword matches
+      const scoredSentences = sentences.map(sentence => {
+        const sentenceWords = sentence.toLowerCase();
+        const score = queryWords.reduce((acc, word) => {
+          return acc + (sentenceWords.includes(word) ? 1 : 0);
+        }, 0);
+        return { sentence, score };
+      });
+
+      scoredSentences.sort((a, b) => b.score - a.score);
+      bestSentences = scoredSentences.slice(0, 3).map(item => item.sentence);
+    }
+
+    const snippet = bestSentences.join(' ').substring(0, 200) + (bestSentences.join(' ').length > 200 ? '...' : '');
+
+    const citation = {
+      pageNumber: chunk.startPage || 1,
+      snippet: snippet.trim(),
+      documentName: chunk.documentName || 'Unknown Document'
+    };
+
+    console.log('Generated citation:', citation);
+    return citation;
+
+  } catch (error) {
+    console.error('Error generating citation:', error);
+    // Return safe fallback
+    return {
+      pageNumber: 1,
+      snippet: 'Content citation unavailable.',
+      documentName: 'Document'
+    };
   }
-
-  const snippet = bestSentences.join(' ').substring(0, 200) + (bestSentences.join(' ').length > 200 ? '...' : '');
-
-  return {
-    pageNumber: chunk.startPage,
-    snippet: snippet.trim(),
-    documentName: chunk.documentName
-  };
 }

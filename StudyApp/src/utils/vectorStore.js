@@ -74,17 +74,33 @@ class VectorStore {
   // Search for relevant chunks across all documents
   searchSimilar(query, topK = 3) {
     if (!this.isInitialized || this.chunks.size === 0) {
+      console.warn('Vector store not initialized or empty');
       return [];
     }
 
-    const { searchRelevantChunks } = require('./ragSystem');
-    const documents = Array.from(this.documents.values()).map(doc => ({
-      id: doc.id,
-      fileName: doc.fileName,
-      chunks: this.getDocumentChunks(doc.id)
-    }));
+    try {
+      console.log(`Searching for "${query}" in ${this.chunks.size} chunks`);
 
-    return searchRelevantChunks(query, documents, topK);
+      // Import ragSystem dynamically to avoid circular dependency
+      import('./ragSystem.js').then(({ searchRelevantChunks }) => {
+        const documents = Array.from(this.documents.values()).map(doc => ({
+          id: doc.id,
+          fileName: doc.fileName,
+          chunks: this.getDocumentChunks(doc.id)
+        }));
+
+        const results = searchRelevantChunks(query, documents, topK);
+        console.log(`Found ${results.length} relevant chunks`);
+        return results;
+      }).catch(error => {
+        console.error('Error importing ragSystem:', error);
+        return [];
+      });
+
+    } catch (error) {
+      console.error('Error in vector store search:', error);
+      return [];
+    }
   }
 
   // Get chunk by ID

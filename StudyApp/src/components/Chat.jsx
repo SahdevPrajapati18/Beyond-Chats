@@ -56,9 +56,11 @@ function Chat({ isVisible, onToggle, uploadedFiles = [] }) {
       for (const file of uploadedFiles) {
         try {
           console.log(`Processing ${file.name} for RAG...`)
+          const { processPdfForRag } = await import('../utils/ragSystem')
           const document = await processPdfForRag(file.url, file.name)
 
           if (document && document.chunks.length > 0) {
+            const { vectorStore } = await import('../utils/vectorStore')
             vectorStore.addDocument(document)
             processedDocs.push(document)
           }
@@ -99,13 +101,48 @@ function Chat({ isVisible, onToggle, uploadedFiles = [] }) {
     setIsLoading(true)
 
     try {
+      const messageLower = inputMessage.toLowerCase().trim()
+
+      // Handle conversational inputs differently - works even without RAG
       if (isRagMode && vectorStore.getStats().totalChunks > 0) {
-        // Use RAG system
+        // Check if it's a conversational input that doesn't need RAG
+        const conversationalInputs = [
+          'hi', 'hello', 'hey', 'greetings', 'good morning', 'good afternoon', 'good evening',
+          'how are you', 'what\'s up', 'sup', 'yo', 'welcome', 'thanks', 'thank you',
+          'please', 'sorry', 'excuse me', 'pardon', 'help', 'assist'
+        ]
+
+        const isConversational = conversationalInputs.some(input =>
+          messageLower.includes(input)
+        ) || messageLower.length < 10
+
+        if (isConversational) {
+          // Handle conversational input with friendly response
+          const aiResponse = {
+            id: (Date.now() + 1).toString(),
+            type: 'assistant',
+            content: getConversationalResponse(inputMessage),
+            timestamp: new Date()
+          }
+
+          const finalChats = updatedChats.map(chat =>
+            chat.id === activeChatId
+              ? { ...chat, messages: [...chat.messages, aiResponse] }
+              : chat
+          )
+          setChats(finalChats)
+          setIsLoading(false)
+          return
+        }
+
+        // Use RAG system for substantive queries
         const relevantChunks = vectorStore.searchSimilar(inputMessage, 3)
+        console.log('RAG search results:', relevantChunks)
 
         if (relevantChunks.length > 0) {
           // Generate RAG response with citations
           const citations = relevantChunks.map(chunk => generateCitation(chunk, inputMessage))
+          console.log('Generated citations:', citations)
 
           let ragResponse = `Based on your documents, here's what I found:\n\n`
 
@@ -131,7 +168,7 @@ function Chat({ isVisible, onToggle, uploadedFiles = [] }) {
           setChats(finalChats)
 
         } else {
-          // No relevant chunks found
+          // No relevant chunks found - provide helpful response
           const aiResponse = {
             id: (Date.now() + 1).toString(),
             type: 'assistant',
@@ -147,7 +184,36 @@ function Chat({ isVisible, onToggle, uploadedFiles = [] }) {
           setChats(finalChats)
         }
       } else {
-        // Use demo response when RAG is disabled or no documents
+        // Handle conversational inputs even when RAG is disabled
+        const conversationalInputs = [
+          'hi', 'hello', 'hey', 'greetings', 'good morning', 'good afternoon', 'good evening',
+          'how are you', 'what\'s up', 'sup', 'yo', 'welcome', 'thanks', 'thank you',
+          'please', 'sorry', 'excuse me', 'pardon', 'help', 'assist'
+        ]
+
+        const isConversational = conversationalInputs.some(input =>
+          messageLower.includes(input)
+        ) || messageLower.length < 10
+
+        if (isConversational) {
+          const aiResponse = {
+            id: (Date.now() + 1).toString(),
+            type: 'assistant',
+            content: getConversationalResponse(inputMessage),
+            timestamp: new Date()
+          }
+
+          const finalChats = updatedChats.map(chat =>
+            chat.id === activeChatId
+              ? { ...chat, messages: [...chat.messages, aiResponse] }
+              : chat
+          )
+          setChats(finalChats)
+          setIsLoading(false)
+          return
+        }
+
+        // Use enhanced demo response for non-RAG mode
         const aiResponse = {
           id: (Date.now() + 1).toString(),
           type: 'assistant',
@@ -155,8 +221,8 @@ function Chat({ isVisible, onToggle, uploadedFiles = [] }) {
 
 **Demo Response**: This is a demonstration of the AI companion interface. To enable real AI responses:
 
-1. Install AI dependencies when ready
-2. Add your API keys to the configuration
+1. Upload some PDFs and enable RAG mode in the chat settings
+2. Add your API keys to the configuration for AI features
 3. Get intelligent answers based on your PDF content
 
 For now, I can help with:
@@ -197,25 +263,28 @@ What would you like to explore?`,
     }
   }
 
-  // Generate contextual answer based on citations
-  const generateRagAnswer = (query, citations) => {
-    // Simple answer generation based on available citations
-    // In a real implementation, this would use an LLM
+  // Generate conversational responses for greetings and simple inputs
+  const getConversationalResponse = (message) => {
+    const msgLower = message.toLowerCase()
 
-    if (citations.length === 0) {
-      return "I couldn't find specific information about this topic in your documents."
+    if (msgLower.includes('hi') || msgLower.includes('hello') || msgLower.includes('hey')) {
+      return `Hello! 👋 I'm your AI study companion. I can help you understand concepts from your PDFs, explain difficult topics, and provide study guidance. What would you like to learn about today?`
     }
 
-    const combinedContent = citations.map(c => c.snippet).join(' ')
-
-    // Basic response logic (demo implementation)
-    if (query.toLowerCase().includes('what') || query.toLowerCase().includes('define')) {
-      return `Based on your documents, the concept appears to be: ${combinedContent.substring(0, 150)}...`
-    } else if (query.toLowerCase().includes('how')) {
-      return `According to your materials, the process involves: ${combinedContent.substring(0, 150)}...`
-    } else {
-      return `From your documents, I can tell you that: ${combinedContent.substring(0, 150)}...`
+    if (msgLower.includes('how are you') || msgLower.includes('what\'s up')) {
+      return `I'm doing great, thank you for asking! I'm here and ready to help you with your studies. Do you have any questions about your uploaded PDFs or need help with any concepts?`
     }
+
+    if (msgLower.includes('thank') || msgLower.includes('thanks')) {
+      return `You're very welcome! I'm glad I could help. Feel free to ask me anything else about your studies or PDFs. I'm here to support your learning journey!`
+    }
+
+    if (msgLower.includes('help')) {
+      return `I'm here to help! I can:\n\n• Answer questions about your uploaded PDFs\n• Explain concepts and provide citations\n• Help with study strategies and techniques\n• Clarify difficult topics\n\nWhat specific help do you need?`
+    }
+
+    // Default conversational response
+    return `I understand you're looking for assistance! I'm your AI study companion with access to your uploaded PDFs. I can help explain concepts, answer questions, and provide study guidance. What would you like to explore?`
   }
 
   const handleKeyPress = (e) => {
