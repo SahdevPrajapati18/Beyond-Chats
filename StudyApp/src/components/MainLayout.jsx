@@ -1,3 +1,7 @@
+import QuizPanel from './QuizPanel'
+import Dashboard from './Dashboard'
+import Chat from './Chat'
+
 function MainLayout({
   sourceMode,
   selectedFile,

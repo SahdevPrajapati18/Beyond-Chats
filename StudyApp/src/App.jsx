@@ -1,9 +1,6 @@
 import { useMemo, useRef, useState, useEffect } from 'react'
 import { extractTextFromPdfUrl } from './utils/pdfText'
 import { generateQuizFromText } from './utils/generateQuestions'
-import QuizPanel from './components/QuizPanel'
-import Dashboard from './components/Dashboard'
-import Chat from './components/Chat'
 import Header from './components/Header'
 import PdfUpload from './components/PdfUpload'
 import MainLayout from './components/MainLayout'
@@ -58,7 +55,7 @@ function App() {
       body.classList.add('theme-dark')
     } else {
       // Default to light on first load
-      setIsDark(false)
+      setIsDark(true)
       body.classList.remove('theme-dark')
       if (saved === null) localStorage.setItem('theme:dark', 'false')
     }
