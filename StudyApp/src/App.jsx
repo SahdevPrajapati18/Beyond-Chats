@@ -1,4 +1,7 @@
-import { useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState, useEffect } from 'react'
+import { extractTextFromPdfUrl } from './utils/pdfText'
+import { generateQuizFromText } from './utils/generateQuestions'
+import QuizPanel from './components/QuizPanel'
 
 function App() {
   const [sourceMode, setSourceMode] = useState('all')
@@ -6,6 +9,9 @@ function App() {
   const [selectedFileId, setSelectedFileId] = useState(null)
   const fileInputRef = useRef(null)
   const [isDragging, setIsDragging] = useState(false)
+  const [quizQuestions, setQuizQuestions] = useState([])
+  const [quizId, setQuizId] = useState('')
+  const [isGenerating, setIsGenerating] = useState(false)
 
   const selectedFile = useMemo(() => {
     if (sourceMode === 'all') return null
@@ -61,6 +67,30 @@ function App() {
 
   function openFilePicker() {
     fileInputRef.current?.click()
+  }
+
+  async function buildQuizFromSelection() {
+    setIsGenerating(true)
+    try {
+      let combinedText = ''
+      if (sourceMode === 'specific' && selectedFile) {
+        combinedText = await extractTextFromPdfUrl(selectedFile.url)
+      } else {
+        // all PDFs: concatenate first few PDFs for speed
+        const firstFew = uploadedFiles.slice(0, 3)
+        for (const f of firstFew) {
+          const t = await extractTextFromPdfUrl(f.url)
+          combinedText += '\n' + t
+        }
+      }
+      const questions = generateQuizFromText(combinedText)
+      setQuizQuestions(questions)
+      setQuizId(`quiz-${Date.now()}`)
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setIsGenerating(false)
+    }
   }
 
   return (
@@ -181,8 +211,27 @@ function App() {
           </section>
 
           <section className="h-[70vh] lg:h-[80vh] border rounded-xl bg-white overflow-hidden shadow-sm">
-            <div className="h-12 border-b bg-gray-50 flex items-center px-3 text-sm font-medium text-gray-800">Chat</div>
-            <div className="p-6 text-sm text-gray-600">Chat UI placeholder</div>
+            <div className="h-12 border-b bg-gray-50 flex items-center justify-between px-3 text-sm">
+              <div className="font-medium text-gray-800">Quiz</div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={buildQuizFromSelection}
+                  disabled={uploadedFiles.length === 0 || isGenerating}
+                  className="px-2.5 py-1 rounded-md bg-indigo-600 disabled:opacity-50 text-white text-xs"
+                >{isGenerating ? 'Generating…' : 'Generate from Selection'}</button>
+              </div>
+            </div>
+            <div className="p-3 h-[calc(100%-3rem)] overflow-auto">
+              {quizQuestions.length === 0 ? (
+                <div className="text-sm text-gray-600">Generate a quiz from your uploaded PDFs.</div>
+              ) : (
+                <QuizPanel
+                  quizId={quizId}
+                  questions={quizQuestions}
+                  onRegenerate={buildQuizFromSelection}
+                />
+              )}
+            </div>
           </section>
         </div>
       </main>
