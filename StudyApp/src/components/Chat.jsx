@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
+import { processPdfForRag, searchRelevantChunks, generateCitation } from '../utils/ragSystem'
+import { vectorStore } from '../utils/vectorStore'
 
-function Chat({ isVisible, onToggle }) {
+function Chat({ isVisible, onToggle, uploadedFiles = [] }) {
   const [chats, setChats] = useState([
     {
       id: '1',
@@ -9,7 +11,7 @@ function Chat({ isVisible, onToggle }) {
         {
           id: '1',
           type: 'assistant',
-          content: 'Hello! I\'m your AI study companion. I can help you understand concepts from your PDFs, explain difficult topics, and provide study guidance. Ask me anything!',
+          content: 'Hello! I\'m your AI study companion with RAG capabilities. I can help you understand concepts from your PDFs, explain difficult topics, and provide study guidance. Ask me anything!',
           timestamp: new Date()
         }
       ],
@@ -20,6 +22,9 @@ function Chat({ isVisible, onToggle }) {
   const [activeChatId, setActiveChatId] = useState('1')
   const [inputMessage, setInputMessage] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [isRagMode, setIsRagMode] = useState(true)
+  const [availableDocuments, setAvailableDocuments] = useState([])
+  const [isProcessingPdfs, setIsProcessingPdfs] = useState(false)
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
 
@@ -33,6 +38,45 @@ function Chat({ isVisible, onToggle }) {
     scrollToBottom()
   }, [activeChat?.messages])
 
+  // Process uploaded PDFs for RAG when they change
+  useEffect(() => {
+    if (uploadedFiles.length > 0 && isRagMode) {
+      processPdfsForRag()
+    }
+  }, [uploadedFiles, isRagMode])
+
+  const processPdfsForRag = async () => {
+    if (uploadedFiles.length === 0 || !isRagMode) return
+
+    setIsProcessingPdfs(true)
+
+    try {
+      const processedDocs = []
+
+      for (const file of uploadedFiles) {
+        try {
+          console.log(`Processing ${file.name} for RAG...`)
+          const document = await processPdfForRag(file.url, file.name)
+
+          if (document && document.chunks.length > 0) {
+            vectorStore.addDocument(document)
+            processedDocs.push(document)
+          }
+        } catch (error) {
+          console.error(`Error processing ${file.name}:`, error)
+        }
+      }
+
+      setAvailableDocuments(processedDocs)
+      console.log(`Successfully processed ${processedDocs.length} documents for RAG`)
+
+    } catch (error) {
+      console.error('Error in RAG processing:', error)
+    } finally {
+      setIsProcessingPdfs(false)
+    }
+  }
+
   const sendMessage = async () => {
     if (!inputMessage.trim() || isLoading) return
 
@@ -43,6 +87,7 @@ function Chat({ isVisible, onToggle }) {
       timestamp: new Date()
     }
 
+    // Add user message to active chat
     const updatedChats = chats.map(chat =>
       chat.id === activeChatId
         ? { ...chat, messages: [...chat.messages, userMessage] }
@@ -53,11 +98,60 @@ function Chat({ isVisible, onToggle }) {
     setInputMessage('')
     setIsLoading(true)
 
-    setTimeout(() => {
-      const aiResponse = {
-        id: (Date.now() + 1).toString(),
-        type: 'assistant',
-        content: `Thank you for your question! I'm here to help you with your studies.
+    try {
+      if (isRagMode && vectorStore.getStats().totalChunks > 0) {
+        // Use RAG system
+        const relevantChunks = vectorStore.searchSimilar(inputMessage, 3)
+
+        if (relevantChunks.length > 0) {
+          // Generate RAG response with citations
+          const citations = relevantChunks.map(chunk => generateCitation(chunk, inputMessage))
+
+          let ragResponse = `Based on your documents, here's what I found:\n\n`
+
+          citations.forEach((citation, index) => {
+            ragResponse += `**Citation ${index + 1}:** According to p. ${citation.pageNumber} of ${citation.documentName}:\n"${citation.snippet}"\n\n`
+          })
+
+          ragResponse += `**Answer:** ${generateRagAnswer(inputMessage, citations)}\n\n*This answer is based on the content of your uploaded documents.*`
+
+          const aiResponse = {
+            id: (Date.now() + 1).toString(),
+            type: 'assistant',
+            content: ragResponse,
+            timestamp: new Date(),
+            citations: citations
+          }
+
+          const finalChats = updatedChats.map(chat =>
+            chat.id === activeChatId
+              ? { ...chat, messages: [...chat.messages, aiResponse] }
+              : chat
+          )
+          setChats(finalChats)
+
+        } else {
+          // No relevant chunks found
+          const aiResponse = {
+            id: (Date.now() + 1).toString(),
+            type: 'assistant',
+            content: `I couldn't find specific information about "${inputMessage}" in your uploaded documents. You can:\n\n1. Upload more relevant PDFs\n2. Try rephrasing your question\n3. Ask about general study topics\n\nWhat would you like to explore?`,
+            timestamp: new Date()
+          }
+
+          const finalChats = updatedChats.map(chat =>
+            chat.id === activeChatId
+              ? { ...chat, messages: [...chat.messages, aiResponse] }
+              : chat
+          )
+          setChats(finalChats)
+        }
+      } else {
+        // Use demo response when RAG is disabled or no documents
+        const aiResponse = {
+          id: (Date.now() + 1).toString(),
+          type: 'assistant',
+          content: `Thank you for your question! I'm here to help you with your studies.
 
 **Demo Response**: This is a demonstration of the AI companion interface. To enable real AI responses:
 
@@ -72,17 +166,56 @@ For now, I can help with:
 - 💡 Learning strategies
 
 What would you like to explore?`,
+          timestamp: new Date()
+        }
+
+        const finalChats = updatedChats.map(chat =>
+          chat.id === activeChatId
+          ? { ...chat, messages: [...chat.messages, aiResponse] }
+          : chat
+        )
+        setChats(finalChats)
+      }
+    } catch (error) {
+      console.error('Error generating response:', error)
+
+      const errorResponse = {
+        id: (Date.now() + 1).toString(),
+        type: 'assistant',
+        content: `I apologize, but I encountered an error while processing your question. Please try again or check if your documents are properly uploaded.`,
         timestamp: new Date()
       }
 
       const finalChats = updatedChats.map(chat =>
         chat.id === activeChatId
-          ? { ...chat, messages: [...chat.messages, aiResponse] }
+          ? { ...chat, messages: [...chat.messages, errorResponse] }
           : chat
       )
       setChats(finalChats)
+    } finally {
       setIsLoading(false)
-    }, 1500)
+    }
+  }
+
+  // Generate contextual answer based on citations
+  const generateRagAnswer = (query, citations) => {
+    // Simple answer generation based on available citations
+    // In a real implementation, this would use an LLM
+
+    if (citations.length === 0) {
+      return "I couldn't find specific information about this topic in your documents."
+    }
+
+    const combinedContent = citations.map(c => c.snippet).join(' ')
+
+    // Basic response logic (demo implementation)
+    if (query.toLowerCase().includes('what') || query.toLowerCase().includes('define')) {
+      return `Based on your documents, the concept appears to be: ${combinedContent.substring(0, 150)}...`
+    } else if (query.toLowerCase().includes('how')) {
+      return `According to your materials, the process involves: ${combinedContent.substring(0, 150)}...`
+    } else {
+      return `From your documents, I can tell you that: ${combinedContent.substring(0, 150)}...`
+    }
   }
 
   const handleKeyPress = (e) => {
@@ -128,15 +261,47 @@ What would you like to explore?`,
           </svg>
           <h3 className="font-medium text-gray-900 dark:text-white">AI Study Companion</h3>
         </div>
-        <button
-          onClick={onToggle}
-          className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
-        >
-          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
+        <div className="flex items-center gap-2">
+          {/* RAG Mode Toggle */}
+          <button
+            onClick={() => setIsRagMode(!isRagMode)}
+            className={`px-2 py-1 text-xs rounded-full transition-colors ${
+              isRagMode
+                ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+            title={isRagMode ? 'RAG mode enabled' : 'RAG mode disabled'}
+          >
+            {isRagMode ? 'RAG' : 'Demo'}
+          </button>
+
+          <button
+            onClick={onToggle}
+            className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+          >
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
       </div>
+
+      {/* RAG Status */}
+      {isRagMode && (
+        <div className="px-3 py-2 bg-blue-50 dark:bg-blue-900/20 border-b border-blue-200 dark:border-blue-800">
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-blue-700 dark:text-blue-300">
+              RAG Mode: {vectorStore.getStats().totalChunks > 0 ? `${vectorStore.getStats().totalChunks} chunks ready` : 'Processing PDFs...'}
+            </span>
+            {isProcessingPdfs && (
+              <div className="flex items-center gap-1 text-blue-600">
+                <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce"></div>
+                <span className="text-xs">Processing</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-3 space-y-3">
@@ -167,7 +332,9 @@ What would you like to explore?`,
                   <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
                   <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
                 </div>
-                <span className="text-sm text-gray-500 dark:text-gray-400">Thinking...</span>
+                <span className="text-sm text-gray-500 dark:text-gray-400">
+                  {isRagMode ? 'Searching documents...' : 'Thinking...'}
+                </span>
               </div>
             </div>
           </div>
@@ -183,7 +350,7 @@ What would you like to explore?`,
             value={inputMessage}
             onChange={(e) => setInputMessage(e.target.value)}
             onKeyPress={handleKeyPress}
-            placeholder="Ask me anything about your studies..."
+            placeholder={isRagMode ? "Ask me anything about your uploaded PDFs..." : "Ask me anything about your studies..."}
             className="flex-1 resize-none rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white text-sm"
             rows={1}
             style={{ minHeight: '36px', maxHeight: '80px' }}
@@ -202,6 +369,11 @@ What would you like to explore?`,
             </svg>
           </button>
         </div>
+        {isRagMode && (
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+            RAG Mode: Answers will include citations from your PDFs
+          </p>
+        )}
       </div>
     </div>
   )
