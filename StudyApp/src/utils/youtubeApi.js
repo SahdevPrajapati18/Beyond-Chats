@@ -3,7 +3,7 @@
  */
 
 // YouTube API configuration
-const YOUTUBE_API_KEY = 'AIzaSyCzBj2hwrymd9WMWCjMj1p1hf9foB_43aA'; // Replace with actual API key
+const YOUTUBE_API_KEY = 'Your_Youtube_API_KEY_HERE'; // Replace with actual API key
 const YOUTUBE_API_URL = 'https://www.googleapis.com/youtube/v3/search';
 
 // Search for educational videos based on topics
