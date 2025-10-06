@@ -39,13 +39,13 @@ export default function Dashboard() {
         </div>
         <div className="border rounded-lg bg-white p-4 dark:bg-gray-800 dark:border-gray-700">
           <div className="text-xs text-gray-500 dark:text-gray-400">Correct</div>
-          <div className="text-2xl font-semibold text-emerald-700 dark:text-emerald-400">{data.totals.correct}</div>
+          <div className="text-2xl font-semibold text-brand-700 dark:text-brand-400">{data.totals.correct}</div>
         </div>
         <div className="border rounded-lg bg-white p-4 dark:bg-gray-800 dark:border-gray-700">
           <div className="text-xs text-gray-500 dark:text-gray-400">Accuracy</div>
           <div className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{overallPct}%</div>
           <div className="mt-2 h-2 bg-gray-100 dark:bg-gray-700 rounded">
-            <div className="h-full bg-emerald-500 dark:bg-emerald-400 rounded" style={{ width: `${overallPct}%` }} />
+            <div className="h-full bg-brand-500 dark:bg-brand-400 rounded" style={{ width: `${overallPct}%` }} />
           </div>
         </div>
       </div>
@@ -64,7 +64,7 @@ export default function Dashboard() {
                 </div>
                 <div className="w-28 text-right font-medium text-gray-900 dark:text-gray-100">{t.pct}%</div>
                 <div className="w-40 h-2 bg-gray-100 dark:bg-gray-700 rounded">
-                  <div className={`${t.pct >= 60 ? 'bg-emerald-500 dark:bg-emerald-400' : t.pct >= 40 ? 'bg-amber-500 dark:bg-amber-400' : 'bg-rose-500 dark:bg-rose-400'} h-full rounded`} style={{ width: `${t.pct}%` }} />
+                  <div className={`${t.pct >= 60 ? 'bg-brand-500 dark:bg-brand-400' : t.pct >= 40 ? 'bg-amber-500 dark:bg-amber-400' : 'bg-rose-500 dark:bg-rose-400'} h-full rounded`} style={{ width: `${t.pct}%` }} />
                 </div>
               </li>
             ))}

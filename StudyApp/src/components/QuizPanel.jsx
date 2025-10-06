@@ -72,7 +72,7 @@ export default function QuizPanel({ quizId, questions, onRegenerate }) {
         <div className="flex items-center gap-2">
           <button
             onClick={onRegenerate}
-            className="px-3 py-1.5 rounded-md bg-brand-600 hover:bg-brand-700 text-white text-sm"
+            className="px-3 py-1.5 rounded-md bg-brand-500 hover:bg-brand-600 text-white text-sm"
           >Generate New Set</button>
           {!submitted ? (
             <button
