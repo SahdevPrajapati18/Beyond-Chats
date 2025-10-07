@@ -48,7 +48,6 @@ function PdfUpload({
     const dtFiles = Array.from(e.dataTransfer?.files || [])
     if (dtFiles.length === 0) return
 
-    // Filter for PDF files and check file type
     const pdfs = dtFiles.filter(f => {
       return f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')
     })
@@ -58,21 +57,13 @@ function PdfUpload({
       return
     }
 
-    console.log(`Processing ${pdfs.length} PDF files`)
-
     const newItems = pdfs.map(file => ({
       id: `${file.name}-${file.size}-${file.lastModified}`,
       name: file.name,
       url: URL.createObjectURL(file),
     }))
 
-    console.log('New items created:', newItems)
-
-    setUploadedFiles(prev => {
-      const updated = [...prev, ...newItems]
-      console.log('Updated uploaded files:', updated)
-      return updated
-    })
+    setUploadedFiles(prev => [...prev, ...newItems])
 
     if (sourceMode === 'specific' && !selectedFileId && newItems[0]) {
       setSelectedFileId(newItems[0].id)
@@ -80,64 +71,63 @@ function PdfUpload({
   }
 
   function openFilePicker() {
-    console.log('Opening file picker...')
     if (fileInputRef.current) {
-      console.log('File input found, clicking...')
       fileInputRef.current.click()
-      console.log('File input clicked')
-    } else {
-      console.log('File input ref is null')
     }
   }
 
   return (
     <>
       <div className="mb-4">
-        <h2 className="text-sm font-semibold strong mb-2">Upload materials</h2>
-        <p className="text-xs strong mb-2">Bring your course PDFs to generate targeted quizzes.</p>
+        <h2 className="text-sm font-semibold mb-2">Upload materials</h2>
+        <p className="text-xs font-medium text-zinc-600 dark:text-zinc-400 mb-2">
+          Bring your course PDFs to generate targeted quizzes.
+        </p>
       </div>
 
       <div className="relative mb-5">
-        {/* Hidden file input */}
+        {/* We can trigger the hidden input by clicking the dropzone */}
         <input
           ref={fileInputRef}
           type="file"
           accept="application/pdf"
           multiple
           onChange={handleUploadChange}
-          className="absolute opacity-0 w-full h-full cursor-pointer z-10"
+          className="hidden"
           id="pdf-upload-input"
         />
 
         <div
+          onClick={openFilePicker}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
-          className={`relative rounded-xl border-2 border-dashed transition-all duration-200 cursor-pointer min-h-[120px] flex items-center justify-center z-0 ${
+          className={`relative rounded-xl border-2 border-dashed transition-all duration-200 cursor-pointer min-h-[120px] flex items-center justify-center ${
             isDragging
-              ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 scale-105 shadow-lg'
-              : 'border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/80 hover:border-gray-400 dark:hover:border-gray-600'
+              ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 scale-105 shadow-lg'
+              : 'border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 hover:bg-zinc-50 dark:hover:bg-zinc-800/80 hover:border-zinc-400 dark:hover:border-zinc-600'
           }`}
         >
           <div className="px-5 py-6 text-center pointer-events-none">
             <div className={`mx-auto size-10 rounded-full grid place-items-center mb-3 transition-colors ${
-              isDragging ? 'bg-blue-100 dark:bg-blue-900/50' : 'bg-gray-100 dark:bg-gray-700'
-            }`}>
-              <svg viewBox="0 0 24 24" fill="none" className={`size-5 transition-colors ${
-                isDragging ? 'text-blue-600 dark:text-blue-400' : 'text-gray-600 dark:text-gray-200'
+                isDragging ? 'bg-indigo-100 dark:bg-indigo-900/50' : 'bg-zinc-100 dark:bg-zinc-700'
               }`}>
+              <svg viewBox="0 0 24 24" fill="none" className={`size-5 transition-colors ${
+                  isDragging ? 'text-indigo-600 dark:text-indigo-400' : 'text-zinc-600 dark:text-zinc-400'
+                }`}>
                 <path d="M12 16V4m0 0 4 4m-4-4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                 <path d="M20 16v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
               </svg>
             </div>
-            <p className={`text-sm strong transition-colors ${
-              isDragging ? 'text-blue-700 dark:text-blue-300' : 'text-gray-600 dark:text-gray-300'
-            }`}>
-              {isDragging ? 'Drop PDFs here!' : 'Drag and drop PDFs here, or'} <span className="text-brand-500 underline">browse</span>
+            <p className={`text-sm font-medium transition-colors ${
+                isDragging ? 'text-indigo-700 dark:text-indigo-300' : 'text-zinc-600 dark:text-zinc-400'
+              }`}>
+              {isDragging ? 'Drop PDFs here!' : 'Drag and drop PDFs here, or '}
+              <span className="text-indigo-600 dark:text-indigo-400 underline">browse</span>
             </p>
-            <p className={`text-xs strong mt-1 transition-colors ${
-              isDragging ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400'
-            }`}>
+            <p className={`text-xs mt-1 transition-colors ${
+                isDragging ? 'text-indigo-600 dark:text-indigo-400' : 'text-zinc-500 dark:text-zinc-500'
+              }`}>
               Only PDF files are supported
             </p>
           </div>
@@ -146,16 +136,16 @@ function PdfUpload({
 
       {uploadedFiles.length > 0 && (
         <div className="mb-5">
-          <h2 className="text-sm font-semibold mb-2 text-gray-800 dark:text-gray-200">Your PDFs</h2>
+          <h2 className="text-sm font-semibold mb-2 text-zinc-800 dark:text-zinc-200">Your PDFs</h2>
           <div className="flex flex-wrap gap-2">
             {uploadedFiles.map(file => (
-              <div key={file.id} className="flex items-center gap-2 border rounded-full pl-2 pr-1 py-1 panel shadow-sm">
-                <svg viewBox="0 0 24 24" fill="none" className="size-4 text-brand-600">
+              <div key={file.id} className="flex items-center gap-2 border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 rounded-full pl-2 pr-1 py-1 shadow-sm">
+                <svg viewBox="0 0 24 24" fill="none" className="size-4 text-indigo-600 dark:text-indigo-400">
                   <path d="M8 3h5l5 5v10a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3Z" stroke="currentColor" strokeWidth="1.5"/>
                   <path d="M13 3v5h5" stroke="currentColor" strokeWidth="1.5"/>
                 </svg>
                 <button
-                  className={`text-xs md:text-sm max-w-[12rem] truncate ${sourceMode === 'specific' && selectedFileId === file.id ? 'font-semibold text-brand-600' : ''}`}
+                  className={`text-xs md:text-sm max-w-[12rem] truncate ${sourceMode === 'specific' && selectedFileId === file.id ? 'font-semibold text-indigo-600 dark:text-indigo-400' : 'text-zinc-700 dark:text-zinc-300'}`}
                   onClick={() => { setSourceMode('specific'); setSelectedFileId(file.id) }}
                   title={file.name}
                 >
@@ -165,7 +155,7 @@ function PdfUpload({
                   href={file.url}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                  className="text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
                   title="Open in new tab"
                 >
                   <svg viewBox="0 0 24 24" fill="none" className="size-4">
@@ -175,7 +165,7 @@ function PdfUpload({
                   </svg>
                 </a>
                 <button
-                  className="ml-1 size-6 grid place-items-center rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-300 hover:text-red-600"
+                  className="ml-1 size-6 grid place-items-center rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-500 dark:text-zinc-400 hover:text-red-500 dark:hover:text-red-500"
                   onClick={() => handleRemoveFile(file.id)}
                   title="Remove"
                 >
