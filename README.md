@@ -7,28 +7,51 @@ It acts as a **virtual teacher**, helping students with coursework through inter
 
 ## 📸 Project Screenshots
 
-### 🖥️ Main Dashboard
+### 🖥️ Desktop Interface
+
+#### Main Dashboard
 ![Main Dashboard](./screenshots/dashboard.png)
+![Alternative Dashboard](./screenshots/dashboard1.png)
 *Overview of the main application interface with chat panel, progress tracking, and navigation*
 
-### 💬 Chat Interface
-![Chat Interface](./screenshots/chat-interface.png)
+#### Chat Interface
+![Chat Interface](./screenshots/mobile-aichat.png)
 *Interactive chat with AI tutor showing RAG-powered responses and document citations*
 
 ### 📱 Mobile Experience
-![Mobile View](./screenshots/mobile-responsive.png)
-*Mobile-optimized interface with drawer navigation and touch-friendly interactions*
 
-### 📊 Progress Analytics
-![Progress Panel](./screenshots/progress-analytics.png)
+#### Mobile Dashboard
+![Mobile Dashboard](./screenshots/mobile-dashboard.png)
+*Mobile-optimized main interface with responsive layout*
+
+#### Mobile AI Chat
+![Mobile AI Chat](./screenshots/mobile-aichat.png)
+*Mobile chat interface with touch-friendly interactions*
+
+#### Mobile Progress
+![Mobile Progress](./screenshots/mobile-progress.png)
+*Mobile progress tracking with visual analytics*
+
+#### Mobile PDF Viewer & Quiz
+![Mobile PDF & Quiz](./screenshots/mobile-pdfviewer-quiz.png)
+*Mobile document viewer and quiz interface*
+
+#### Mobile Video Recommendations
+![Mobile Video](./screenshots/mobile-video.png)
+*Mobile video recommendation interface*
+
+### 🛠️ Feature Screenshots
+
+#### Progress Analytics
+![Progress Panel](./screenshots/progress.png)
 *Visual progress tracking with topic-wise statistics and study session analytics*
 
-### 📄 Document Upload
+#### Document Upload
 ![PDF Upload](./screenshots/pdf-upload.png)
 *Drag-and-drop file upload interface with progress feedback and validation*
 
-### 🎯 Quiz Interface
-![Quiz Panel](./screenshots/quiz-interface.png)
+#### Quiz Interface
+![Quiz Panel](./screenshots/quizfrompdf.png)
 *Interactive quiz system with dynamic question generation and answer validation*
 
 ---
@@ -319,60 +342,30 @@ Upload your study materials and ask questions — Beyond-Chats will respond with
 
 ---
 
-## 📷 Adding Visual Assets
+## 📷 Available Visual Assets
 
-To complete the visual documentation, create a `screenshots/` folder in your project root and add these images:
+The `screenshots/` folder now contains the following images showcasing your Study Revision App:
 
-### Required Screenshots
+### Desktop Interface (110KB - 179KB each)
+- **`dashboard.png`** (111KB) - Main application dashboard with full interface
+- **`dashboard1.png`** (63KB) - Alternative dashboard view
+- **`progress.png`** (172KB) - Detailed progress analytics panel
+- **`pdf-upload.png`** (178KB) - PDF upload interface with drag-and-drop
+- **`quizfrompdf.png`** (180KB) - Quiz interface generated from PDF content
 
-1. **`dashboard.png`** - Main application interface showing:
-   - Chat panel on the left
-   - Progress tracking panel
-   - Header with navigation
-   - Overall layout and design
+### Mobile Experience (14KB - 99KB each)
+- **`mobile-dashboard.png`** (39KB) - Mobile-optimized main interface
+- **`mobile-aichat.png`** (21KB) - Mobile AI chat interface
+- **`mobile-progress.png`** (80KB) - Mobile progress tracking
+- **`mobile-pdfviewer-quiz.png`** (139KB) - Mobile PDF viewer and quiz
+- **`mobile-video.png`** (99KB) - Mobile video recommendations
 
-2. **`chat-interface.png`** - Chat functionality showing:
-   - Conversation with AI tutor
-   - Message bubbles (user and AI)
-   - Document citations in responses
-   - Input area and send button
+### Image Organization
+- **Desktop images** show the full-featured interface on larger screens
+- **Mobile images** demonstrate responsive design and touch interactions
+- **Feature-specific images** highlight key functionality like progress tracking and file upload
 
-3. **`mobile-responsive.png`** - Mobile view demonstrating:
-   - Drawer navigation menu
-   - Responsive message layout
-   - Touch-friendly button sizing
-   - Mobile-optimized spacing
-
-4. **`progress-analytics.png`** - Progress tracking showing:
-   - Visual progress bars
-   - Topic-wise statistics
-   - Study session data
-   - Analytics dashboard
-
-5. **`pdf-upload.png`** - File upload interface showing:
-   - Drag-and-drop area
-   - File selection dialog
-   - Upload progress indicator
-   - File validation feedback
-
-6. **`quiz-interface.png`** - Quiz functionality showing:
-   - Question display
-   - Answer options
-   - Progress indicator
-   - Quiz completion state
-
-### Image Specifications
-- **Format:** PNG (recommended) or JPG
-- **Resolution:** 1920x1080 (desktop) or 390x844 (mobile)
-- **Quality:** High resolution for clear text and UI elements
-- **Style:** Include both light and dark mode variants if possible
-
-### Taking Screenshots
-1. Start the development server: `npm run dev`
-2. Open the application in your browser
-3. Navigate to showcase each feature
-4. Use browser dev tools or screenshot software to capture
-5. Save images in the `screenshots/` folder
+All screenshots are optimized for web display while maintaining clarity of the user interface elements.
 
 ---
 
