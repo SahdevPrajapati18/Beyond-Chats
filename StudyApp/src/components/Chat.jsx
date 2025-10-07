@@ -1,451 +1,424 @@
-import { useState, useRef, useEffect } from 'react'
-import { processPdfForRag, searchRelevantChunks, generateCitation } from '../utils/ragSystem'
-import { vectorStore } from '../utils/vectorStore'
+import React, { useState, useRef, useEffect } from "react";
+import { generateRAGResponse, initializeRAGWithFiles } from "../utils/ragSystem";
 
-function Chat({ isVisible, onToggle, uploadedFiles = [] }) {
+// Simple SVG icon components
+const SendIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M22 2L11 13M22 2l-7 20-4-9-9-4z"/>
+  </svg>
+);
+
+const PlusIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 5v14M5 12h14"/>
+  </svg>
+);
+
+const MessageIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+  </svg>
+);
+
+const UserIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+    <circle cx="12" cy="7" r="4"/>
+  </svg>
+);
+
+const BotIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="11" width="18" height="10" rx="2"/>
+    <circle cx="12" cy="16" r="1"/>
+    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+  </svg>
+);
+
+const ChatPanel = ({ isVisible, onToggle, uploadedFiles = [] }) => {
   const [chats, setChats] = useState([
-    {
-      id: '1',
-      title: 'AI Study Companion',
-      messages: [
-        {
-          id: '1',
-          type: 'assistant',
-          content: 'Hello! I\'m your AI study companion with RAG capabilities. I can help you understand concepts from your PDFs, explain difficult topics, and provide study guidance. Ask me anything!',
-          timestamp: new Date()
-        }
-      ],
-      createdAt: new Date()
-    }
-  ])
+    { id: 1, title: "Study Session 1", messages: [], lastMessage: "Hello! I'm your virtual teacher..." },
+    { id: 2, title: "Math Help", messages: [], lastMessage: "Let's solve that equation together!" }
+  ]);
+  const [currentChatId, setCurrentChatId] = useState(1);
+  const [input, setInput] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [ragInitialized, setRagInitialized] = useState(false);
+  const messagesEndRef = useRef(null);
 
-  const [activeChatId, setActiveChatId] = useState('1')
-  const [inputMessage, setInputMessage] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
-  const [isRagMode, setIsRagMode] = useState(true)
-  const [availableDocuments, setAvailableDocuments] = useState([])
-  const [isProcessingPdfs, setIsProcessingPdfs] = useState(false)
-  const messagesEndRef = useRef(null)
-  const inputRef = useRef(null)
-
-  const activeChat = chats.find(chat => chat.id === activeChatId)
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }
+  const currentChat = chats.find(chat => chat.id === currentChatId) || chats[0];
 
   useEffect(() => {
-    scrollToBottom()
-  }, [activeChat?.messages])
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [currentChat?.messages]);
 
-  // Process uploaded PDFs for RAG when they change
+  // Initialize RAG system when files are uploaded
   useEffect(() => {
-    if (uploadedFiles.length > 0 && isRagMode) {
-      processPdfsForRag()
+    if (uploadedFiles.length > 0 && !ragInitialized) {
+      initializeRAGWithFiles(uploadedFiles)
+        .then(() => {
+          setRagInitialized(true);
+        })
+        .catch(error => {
+          console.error('Error initializing RAG system:', error);
+          setRagInitialized(false); // Reset on error
+        });
     }
-  }, [uploadedFiles, isRagMode])
+  }, [uploadedFiles, ragInitialized]);
 
-  const processPdfsForRag = async () => {
-    if (uploadedFiles.length === 0 || !isRagMode) return
-
-    setIsProcessingPdfs(true)
-
-    try {
-      const processedDocs = []
-
-      for (const file of uploadedFiles) {
-        try {
-          console.log(`Processing ${file.name} for RAG...`)
-          const { processPdfForRag } = await import('../utils/ragSystem')
-          const document = await processPdfForRag(file.url, file.name)
-
-          if (document && document.chunks.length > 0) {
-            const { vectorStore } = await import('../utils/vectorStore')
-            vectorStore.addDocument(document)
-            processedDocs.push(document)
-          }
-        } catch (error) {
-          console.error(`Error processing ${file.name}:`, error)
-        }
-      }
-
-      setAvailableDocuments(processedDocs)
-      console.log(`Successfully processed ${processedDocs.length} documents for RAG`)
-
-    } catch (error) {
-      console.error('Error in RAG processing:', error)
-    } finally {
-      setIsProcessingPdfs(false)
-    }
-  }
-
-  const sendMessage = async () => {
-    if (!inputMessage.trim() || isLoading) return
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!input.trim() || isLoading || !currentChat) return;
 
     const userMessage = {
-      id: Date.now().toString(),
-      type: 'user',
-      content: inputMessage.trim(),
+      id: Date.now(),
+      text: input,
+      sender: 'user',
       timestamp: new Date()
-    }
+    };
 
-    // Add user message to active chat
-    const updatedChats = chats.map(chat =>
-      chat.id === activeChatId
-        ? { ...chat, messages: [...chat.messages, userMessage] }
-        : chat
-    )
-    setChats(updatedChats)
-
-    setInputMessage('')
-    setIsLoading(true)
-
-    try {
-      const messageLower = inputMessage.toLowerCase().trim()
-
-      // Handle conversational inputs differently - works even without RAG
-      if (isRagMode && vectorStore.getStats().totalChunks > 0) {
-        // Check if it's a conversational input that doesn't need RAG
-        const conversationalInputs = [
-          'hi', 'hello', 'hey', 'greetings', 'good morning', 'good afternoon', 'good evening',
-          'how are you', 'what\'s up', 'sup', 'yo', 'welcome', 'thanks', 'thank you',
-          'please', 'sorry', 'excuse me', 'pardon', 'help', 'assist'
-        ]
-
-        const isConversational = conversationalInputs.some(input =>
-          messageLower.includes(input)
-        ) || messageLower.length < 10
-
-        if (isConversational) {
-          // Handle conversational input with friendly response
-          const aiResponse = {
-            id: (Date.now() + 1).toString(),
-            type: 'assistant',
-            content: getConversationalResponse(inputMessage),
-            timestamp: new Date()
-          }
-
-          const finalChats = updatedChats.map(chat =>
-            chat.id === activeChatId
-              ? { ...chat, messages: [...chat.messages, aiResponse] }
-              : chat
-          )
-          setChats(finalChats)
-          setIsLoading(false)
-          return
-        }
-
-        // Use RAG system for substantive queries
-        const relevantChunks = vectorStore.searchSimilar(inputMessage, 3)
-        console.log('RAG search results:', relevantChunks)
-
-        if (relevantChunks.length > 0) {
-          // Generate RAG response with citations
-          const citations = relevantChunks.map(chunk => generateCitation(chunk, inputMessage))
-          console.log('Generated citations:', citations)
-
-          let ragResponse = `Based on your documents, here's what I found:\n\n`
-
-          citations.forEach((citation, index) => {
-            ragResponse += `**Citation ${index + 1}:** According to p. ${citation.pageNumber} of ${citation.documentName}:\n"${citation.snippet}"\n\n`
-          })
-
-          ragResponse += `**Answer:** ${generateRagAnswer(inputMessage, citations)}\n\n*This answer is based on the content of your uploaded documents.*`
-
-          const aiResponse = {
-            id: (Date.now() + 1).toString(),
-            type: 'assistant',
-            content: ragResponse,
-            timestamp: new Date(),
-            citations: citations
-          }
-
-          const finalChats = updatedChats.map(chat =>
-            chat.id === activeChatId
-              ? { ...chat, messages: [...chat.messages, aiResponse] }
-              : chat
-          )
-          setChats(finalChats)
-
-        } else {
-          // No relevant chunks found - provide helpful response
-          const aiResponse = {
-            id: (Date.now() + 1).toString(),
-            type: 'assistant',
-            content: `I couldn't find specific information about "${inputMessage}" in your uploaded documents. You can:\n\n1. Upload more relevant PDFs\n2. Try rephrasing your question\n3. Ask about general study topics\n\nWhat would you like to explore?`,
-            timestamp: new Date()
-          }
-
-          const finalChats = updatedChats.map(chat =>
-            chat.id === activeChatId
-              ? { ...chat, messages: [...chat.messages, aiResponse] }
-              : chat
-          )
-          setChats(finalChats)
-        }
-      } else {
-        // Handle conversational inputs even when RAG is disabled
-        const conversationalInputs = [
-          'hi', 'hello', 'hey', 'greetings', 'good morning', 'good afternoon', 'good evening',
-          'how are you', 'what\'s up', 'sup', 'yo', 'welcome', 'thanks', 'thank you',
-          'please', 'sorry', 'excuse me', 'pardon', 'help', 'assist'
-        ]
-
-        const isConversational = conversationalInputs.some(input =>
-          messageLower.includes(input)
-        ) || messageLower.length < 10
-
-        if (isConversational) {
-          const aiResponse = {
-            id: (Date.now() + 1).toString(),
-            type: 'assistant',
-            content: getConversationalResponse(inputMessage),
-            timestamp: new Date()
-          }
-
-          const finalChats = updatedChats.map(chat =>
-            chat.id === activeChatId
-              ? { ...chat, messages: [...chat.messages, aiResponse] }
-              : chat
-          )
-          setChats(finalChats)
-          setIsLoading(false)
-          return
-        }
-
-        // Use enhanced demo response for non-RAG mode
-        const aiResponse = {
-          id: (Date.now() + 1).toString(),
-          type: 'assistant',
-          content: `Thank you for your question! I'm here to help you with your studies.
-
-**Demo Response**: This is a demonstration of the AI companion interface. To enable real AI responses:
-
-1. Upload some PDFs and enable RAG mode in the chat settings
-2. Add your API keys to the configuration for AI features
-3. Get intelligent answers based on your PDF content
-
-For now, I can help with:
-- 📚 Study tips and techniques
-- 🔍 Concept explanations
-- 📝 Practice problem guidance
-- 💡 Learning strategies
-
-What would you like to explore?`,
-          timestamp: new Date()
-        }
-
-        const finalChats = updatedChats.map(chat =>
-          chat.id === activeChatId
-          ? { ...chat, messages: [...chat.messages, aiResponse] }
-          : chat
-        )
-        setChats(finalChats)
-      }
-    } catch (error) {
-      console.error('Error generating response:', error)
-
-      const errorResponse = {
-        id: (Date.now() + 1).toString(),
-        type: 'assistant',
-        content: `I apologize, but I encountered an error while processing your question. Please try again or check if your documents are properly uploaded.`,
-        timestamp: new Date()
-      }
-
-      const finalChats = updatedChats.map(chat =>
-        chat.id === activeChatId
-          ? { ...chat, messages: [...chat.messages, errorResponse] }
+    // Update current chat with user message
+    setChats(prevChats =>
+      prevChats.map(chat =>
+        chat.id === currentChatId
+          ? { ...chat, messages: [...chat.messages, userMessage] }
           : chat
       )
-      setChats(finalChats)
+    );
+
+    setInput("");
+    setIsLoading(true);
+
+    try {
+      // Use RAG system if files are available
+      if (uploadedFiles.length > 0 && ragInitialized) {
+        const fileIds = uploadedFiles.map(file => file.id);
+        const ragResponse = await generateRAGResponse(input, fileIds);
+
+        if (!currentChat) return; // Check again after async operation
+
+        const aiResponse = {
+          id: Date.now() + 1,
+          text: ragResponse.response,
+          sender: 'assistant',
+          timestamp: new Date(),
+          citations: ragResponse.citations,
+          isRAGResponse: true
+        };
+
+        setChats(prevChats =>
+          prevChats.map(chat =>
+            chat.id === currentChatId
+              ? { ...chat, messages: [...chat.messages, aiResponse] }
+              : chat
+          )
+        );
+      } else {
+        // Fallback to simple response if no files uploaded or RAG not initialized
+        if (!currentChat) return; // Check again after async operation
+
+        const aiResponse = {
+          id: Date.now() + 1,
+          text: `Thank you for your question: "${userMessage.text}". As your virtual teacher, I can help you understand this topic better. Please upload some study materials (PDFs) so I can provide more specific and accurate answers with citations from your documents.`,
+          sender: 'assistant',
+          timestamp: new Date(),
+          isRAGResponse: false
+        };
+
+        setChats(prevChats =>
+          prevChats.map(chat =>
+            chat.id === currentChatId
+              ? { ...chat, messages: [...chat.messages, aiResponse] }
+              : chat
+          )
+        );
+      }
+    } catch (error) {
+      console.error('Error generating response:', error);
+
+      if (!currentChat) return; // Check again after async operation
+
+      const errorResponse = {
+        id: Date.now() + 1,
+        text: "I apologize, but I encountered an error while processing your question. Please try again or upload some study materials for better assistance.",
+        sender: 'assistant',
+        timestamp: new Date(),
+        isRAGResponse: false
+      };
+
+      setChats(prevChats =>
+        prevChats.map(chat =>
+          chat.id === currentChatId
+            ? { ...chat, messages: [...chat.messages, errorResponse] }
+            : chat
+        )
+      );
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
-  // Generate conversational responses for greetings and simple inputs
-  const getConversationalResponse = (message) => {
-    const msgLower = message.toLowerCase()
+  const createNewChat = () => {
+    const newChat = {
+      id: Date.now(),
+      title: `Study Session ${chats.length + 1}`,
+      messages: [],
+      lastMessage: "New conversation started"
+    };
+    setChats(prev => [newChat, ...prev]);
+    setCurrentChatId(newChat.id);
+    setShowMenu(false);
+  };
 
-    if (msgLower.includes('hi') || msgLower.includes('hello') || msgLower.includes('hey')) {
-      return `Hello! 👋 I'm your AI study companion. I can help you understand concepts from your PDFs, explain difficult topics, and provide study guidance. What would you like to learn about today?`
-    }
+  const deleteCurrentChat = () => {
+    if (chats.length <= 1) return; // Don't delete if it's the only chat
 
-    if (msgLower.includes('how are you') || msgLower.includes('what\'s up')) {
-      return `I'm doing great, thank you for asking! I'm here and ready to help you with your studies. Do you have any questions about your uploaded PDFs or need help with any concepts?`
-    }
-
-    if (msgLower.includes('thank') || msgLower.includes('thanks')) {
-      return `You're very welcome! I'm glad I could help. Feel free to ask me anything else about your studies or PDFs. I'm here to support your learning journey!`
-    }
-
-    if (msgLower.includes('help')) {
-      return `I'm here to help! I can:\n\n• Answer questions about your uploaded PDFs\n• Explain concepts and provide citations\n• Help with study strategies and techniques\n• Clarify difficult topics\n\nWhat specific help do you need?`
-    }
-
-    // Default conversational response
-    return `I understand you're looking for assistance! I'm your AI study companion with access to your uploaded PDFs. I can help explain concepts, answer questions, and provide study guidance. What would you like to explore?`
-  }
-
-  const handleKeyPress = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      sendMessage()
-    }
-  }
-
-  const formatTime = (date) => {
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  }
-
-  const formatMessage = (content) => {
-    return content
-      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*(.*?)\*/g, '<em>$1</em>')
-      .replace(/`(.*?)`/g, '<code>$1</code>')
-      .replace(/\n/g, '<br>')
-  }
+    const newChats = chats.filter(chat => chat.id !== currentChatId);
+    setChats(newChats);
+    setCurrentChatId(newChats[0]?.id || 1);
+    setShowMenu(false);
+  };
 
   if (!isVisible) {
-    return (
-      <div className="h-full flex items-center justify-center bg-gray-50 dark:bg-gray-900">
-        <div className="text-center">
-          <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-          </svg>
-          <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white">AI Companion</h3>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Click the chat button to start</p>
-        </div>
-      </div>
-    )
+    return null;
   }
 
   return (
-    <div className="h-full flex flex-col bg-white dark:bg-gray-800">
-      {/* Chat Header */}
-      <div className="flex items-center justify-between p-3 border-b border-gray-200 dark:border-gray-700">
-        <div className="flex items-center gap-2">
-          <svg className="h-5 w-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-          </svg>
-          <h3 className="font-medium text-gray-900 dark:text-white">AI Study Companion</h3>
-        </div>
-        <div className="flex items-center gap-2">
-          {/* RAG Mode Toggle */}
-          <button
-            onClick={() => setIsRagMode(!isRagMode)}
-            className={`px-2 py-1 text-xs rounded-full transition-colors ${
-              isRagMode
-                ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
-            title={isRagMode ? 'RAG mode enabled' : 'RAG mode disabled'}
-          >
-            {isRagMode ? 'RAG' : 'Demo'}
-          </button>
-
-          <button
-            onClick={onToggle}
-            className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
-          >
-            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-      </div>
-
-      {/* RAG Status */}
-      {isRagMode && (
-        <div className="px-3 py-2 bg-blue-50 dark:bg-blue-900/20 border-b border-blue-200 dark:border-blue-800">
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-blue-700 dark:text-blue-300">
-              RAG Mode: {vectorStore.getStats().totalChunks > 0 ? `${vectorStore.getStats().totalChunks} chunks ready` : 'Processing PDFs...'}
-            </span>
-            {isProcessingPdfs && (
-              <div className="flex items-center gap-1 text-blue-600">
-                <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce"></div>
-                <span className="text-xs">Processing</span>
-              </div>
+    <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
+      {/* Left Sidebar - Chat List */}
+      <aside className={`bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col transition-all duration-300 ${
+        sidebarCollapsed ? 'w-16' : 'w-80'
+      }`}>
+        {/* Header */}
+        <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+          <div className="flex items-center justify-between mb-4">
+            {!sidebarCollapsed && (
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Virtual Teacher</h2>
             )}
-          </div>
-        </div>
-      )}
-
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-3">
-        {activeChat?.messages.map(message => (
-          <div
-            key={message.id}
-            className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
-          >
-            <div
-              className={`max-w-xs px-3 py-2 rounded-lg ${message.type === 'user' ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white'}`}
+            <button
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 transition-colors"
             >
-              <div
-                className="text-sm"
-                dangerouslySetInnerHTML={{ __html: formatMessage(message.content) }}
-              />
-              <p className={`text-xs mt-1 ${message.type === 'user' ? 'text-blue-100' : 'text-gray-500 dark:text-gray-400'}`}>
-                {formatTime(message.timestamp)}
-              </p>
-            </div>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="3" y1="6" x2="21" y2="6"/>
+                <line x1="3" y1="12" x2="21" y2="12"/>
+                <line x1="3" y1="18" x2="21" y2="18"/>
+              </svg>
+            </button>
           </div>
-        ))}
-        {isLoading && (
-          <div className="flex justify-start">
-            <div className="bg-gray-100 dark:bg-gray-700 p-3 rounded-lg">
-              <div className="flex items-center gap-2">
-                <div className="flex gap-1">
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+
+          {!sidebarCollapsed && (
+            <button
+              onClick={createNewChat}
+              className="w-full flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
+            >
+              <PlusIcon />
+              New Chat
+            </button>
+          )}
+        </div>
+
+        {/* Chat List */}
+        <div className="flex-1 overflow-y-auto">
+          {!sidebarCollapsed ? (
+            chats.map(chat => (
+              <button
+                key={chat.id}
+                onClick={() => setCurrentChatId(chat.id)}
+                className={`w-full p-3 text-left hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors border-l-4 ${
+                  currentChatId === chat.id
+                    ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-600'
+                    : 'border-transparent'
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                    currentChatId === chat.id
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300'
+                  }`}>
+                    <MessageIcon />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-gray-900 dark:text-white text-sm truncate">
+                      {chat.title}
+                    </div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400 truncate mt-1">
+                      {chat.lastMessage}
+                    </div>
+                  </div>
                 </div>
-                <span className="text-sm text-gray-500 dark:text-gray-400">
-                  {isRagMode ? 'Searching documents...' : 'Thinking...'}
-                </span>
+              </button>
+            ))
+          ) : (
+            <div className="p-2 space-y-2">
+              {chats.slice(0, 5).map(chat => (
+                <button
+                  key={chat.id}
+                  onClick={() => {
+                    setCurrentChatId(chat.id);
+                  }}
+                  className={`w-full p-2 rounded-lg transition-colors ${
+                    currentChatId === chat.id
+                      ? 'bg-blue-600 text-white'
+                      : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300'
+                  }`}
+                  title={chat.title}
+                >
+                  <MessageIcon className="w-6 h-6 mx-auto" />
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </aside>
+
+      {/* Main Chat Area */}
+      <div className="flex-1 flex flex-col">
+        {/* Chat Header */}
+        <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
+                <BotIcon className="text-white" />
+              </div>
+              <div>
+                <h1 className="font-semibold text-gray-900 dark:text-white">Virtual Teacher</h1>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Your AI study companion</p>
               </div>
             </div>
-          </div>
-        )}
-        <div ref={messagesEndRef} />
-      </div>
 
-      {/* Input Area */}
-      <div className="p-3 border-t border-gray-200 dark:border-gray-700">
-        <div className="flex gap-2">
-          <textarea
-            ref={inputRef}
-            value={inputMessage}
-            onChange={(e) => setInputMessage(e.target.value)}
-            onKeyPress={handleKeyPress}
-            placeholder={isRagMode ? "Ask me anything about your uploaded PDFs..." : "Ask me anything about your studies..."}
-            className="flex-1 resize-none rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white text-sm"
-            rows={1}
-            style={{ minHeight: '36px', maxHeight: '80px' }}
-            onInput={(e) => {
-              e.target.style.height = 'auto'
-              e.target.style.height = Math.min(e.target.scrollHeight, 80) + 'px'
-            }}
-          />
-          <button
-            onClick={sendMessage}
-            disabled={!inputMessage.trim() || isLoading}
-            className="px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-colors"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-            </svg>
-          </button>
+            {/* Close Chat Button */}
+            <button
+              onClick={onToggle}
+              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+            </button>
+          </div>
+        </header>
+
+        {/* Messages */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50 dark:bg-gray-900">
+          {currentChat?.messages.length === 0 && !isLoading && (
+            <div className="h-full flex items-center justify-center">
+              <div className="text-center max-w-md mx-auto">
+                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                  <BotIcon className="w-8 h-8 text-blue-600 dark:text-blue-400" />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                  Hello! I'm your Virtual Teacher
+                </h3>
+                <p className="text-gray-600 dark:text-gray-400 text-sm leading-relaxed">
+                  I'm here to help you with your studies. Ask me questions about your coursework,
+                  get explanations for difficult topics, or request practice problems.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {currentChat?.messages.map((msg) => (
+            <div
+              key={msg.id}
+              className={`flex gap-3 ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
+            >
+              {msg.sender === 'assistant' && (
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center flex-shrink-0">
+                  <BotIcon className="w-4 h-4 text-white" />
+                </div>
+              )}
+
+              <div
+                className={`max-w-[80%] sm:max-w-[70%] px-4 py-3 rounded-2xl text-sm ${
+                  msg.sender === 'user'
+                    ? 'bg-blue-600 text-white rounded-br-none'
+                    : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-700 rounded-bl-none shadow-sm'
+                }`}
+              >
+                <div className="whitespace-pre-wrap leading-relaxed">{msg.text}</div>
+
+                {/* Show citations for RAG responses */}
+                {msg.citations && msg.citations.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-600">
+                    <div className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">Sources:</div>
+                    {msg.citations.map((citation, index) => (
+                      <div key={index} className="text-xs text-gray-500 dark:text-gray-400 mb-1 last:mb-0">
+                        <span className="font-medium">According to page{citation.pages.length > 1 ? 's' : ''} {citation.pages.join(', ')}:</span>
+                        <div className="ml-2 italic">"{citation.snippet}"</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className={`text-xs mt-2 opacity-70 ${
+                  msg.sender === 'user' ? 'text-blue-100' : 'text-gray-500 dark:text-gray-400'
+                }`}>
+                  {msg.timestamp.toLocaleTimeString()}
+                </div>
+              </div>
+
+              {msg.sender === 'user' && (
+                <div className="w-8 h-8 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center flex-shrink-0">
+                  <UserIcon className="w-4 h-4 text-gray-600 dark:text-gray-300" />
+                </div>
+              )}
+            </div>
+          ))}
+
+          {isLoading && (
+            <div className="flex gap-3">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center flex-shrink-0">
+                <BotIcon className="w-4 h-4 text-white" />
+              </div>
+              <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl rounded-bl-none px-4 py-3 shadow-sm">
+                <div className="flex items-center gap-2">
+                  <div className="flex gap-1">
+                    <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce"></div>
+                    <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                    <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                  </div>
+                  <span className="text-sm text-gray-500 dark:text-gray-400">Thinking...</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div ref={messagesEndRef}></div>
         </div>
-        {isRagMode && (
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-            RAG Mode: Answers will include citations from your PDFs
-          </p>
-        )}
+
+        {/* Input Area */}
+        <div className="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-4">
+          <form onSubmit={handleSubmit} className="flex items-end gap-3">
+            <div className="flex-1">
+              <textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="Ask your virtual teacher anything..."
+                className="w-full resize-none rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-3 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                rows={1}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSubmit(e);
+                  }
+                }}
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={!input.trim() || isLoading}
+              className="flex-shrink-0 w-10 h-10 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg flex items-center justify-center transition-colors"
+            >
+              <SendIcon />
+            </button>
+          </form>
+        </div>
       </div>
     </div>
-  )
-}
+  );
+};
 
-export default Chat
+export default ChatPanel;

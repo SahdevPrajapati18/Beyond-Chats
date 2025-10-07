@@ -239,59 +239,175 @@ export function searchRelevantChunks(query, documents, topK = 3) {
   return results.slice(0, topK);
 }
 
-// Generate citation from chunk
-export function generateCitation(chunk, query) {
-  try {
-    console.log('Generating citation for chunk:', chunk.id, 'query:', query);
+import { createChunksWithPageInfo } from './pdfText.js';
+class SimpleVectorStore {
+  constructor() {
+    this.chunks = []
+    this.chunkMetadata = []
+  }
 
-    // Extract 2-3 line snippet around relevant content
-    const sentences = chunk.content.split(/[.!?]+/).filter(s => s.trim().length > 10);
+  // Add chunks from a PDF
+  async addDocument(fileId, objectUrl, metadata = {}) {
+    try {
+      const chunkData = await createChunksWithPageInfo(objectUrl)
 
-    if (sentences.length === 0) {
-      console.warn('No sentences found in chunk for citation');
+      const chunksWithMetadata = chunkData.chunks.map((chunk, index) => ({
+        id: `${fileId}_${chunk.chunkIndex}`,
+        content: chunk.content,
+        pages: chunk.pages,
+        metadata: {
+          fileId,
+          chunkIndex: chunk.chunkIndex,
+          ...metadata
+        }
+      }))
+
+      this.chunks.push(...chunksWithMetadata)
+      this.chunkMetadata.push({
+        fileId,
+        totalChunks: chunksWithMetadata.length,
+        metadata
+      })
+
+      return chunksWithMetadata.length
+    } catch (error) {
+      console.error('Error adding document to vector store:', error)
+      throw error
+    }
+  }
+
+  // Simple keyword-based search with relevance scoring
+  search(query, topK = 5) {
+    const queryTerms = query.toLowerCase().split(/\s+/).filter(term => term.length > 2)
+
+    if (queryTerms.length === 0) return []
+
+    // Score chunks based on keyword matches and position
+    const scoredChunks = this.chunks.map(chunk => {
+      let score = 0
+      const chunkText = chunk.content.toLowerCase()
+
+      queryTerms.forEach(term => {
+        // Exact matches get higher scores
+        if (chunkText.includes(term)) {
+          score += 10
+        }
+
+        // Partial matches get lower scores
+        if (chunkText.includes(term.substring(0, 4))) {
+          score += 2
+        }
+
+        // Boost score for matches in first 200 characters (likely more important)
+        if (chunkText.substring(0, 200).includes(term)) {
+          score += 5
+        }
+      })
+
+      // Boost score for chunks with multiple page references (likely more comprehensive)
+      score += chunk.pages.length * 2
+
       return {
-        pageNumber: chunk.startPage || 1,
-        snippet: chunk.content.substring(0, 150) + '...',
-        documentName: chunk.documentName || 'Unknown Document'
-      };
+        ...chunk,
+        relevanceScore: score
+      }
+    })
+
+    // Sort by relevance and return top K
+    return scoredChunks
+      .filter(chunk => chunk.relevanceScore > 0)
+      .sort((a, b) => b.relevanceScore - a.relevanceScore)
+      .slice(0, topK)
+  }
+
+  // Get chunks by file ID
+  getChunksByFile(fileId) {
+    return this.chunks.filter(chunk => chunk.metadata.fileId === fileId)
+  }
+
+  // Clear all chunks
+  clear() {
+    this.chunks = []
+    this.chunkMetadata = []
+  }
+
+  // Get stats
+  getStats() {
+    return {
+      totalChunks: this.chunks.length,
+      totalDocuments: this.chunkMetadata.length,
+      documents: this.chunkMetadata
+    }
+  }
+}
+
+// Global vector store instance
+export const vectorStore = new SimpleVectorStore()
+
+// Generate RAG response with citations
+export async function generateRAGResponse(query, contextFiles = []) {
+  try {
+    // Get relevant chunks from all context files
+    let relevantChunks = []
+
+    for (const fileId of contextFiles) {
+      const chunks = vectorStore.getChunksByFile(fileId)
+      const fileResults = vectorStore.search(query, 3) // Get top 3 from each file
+      relevantChunks.push(...fileResults.filter(chunk => chunk.metadata.fileId === fileId))
     }
 
-    // Find sentences most relevant to the query (simple keyword matching)
-    const queryWords = query.toLowerCase().split(' ').filter(w => w.length > 3);
-
-    let bestSentences = sentences;
-    if (queryWords.length > 0) {
-      // Score sentences by keyword matches
-      const scoredSentences = sentences.map(sentence => {
-        const sentenceWords = sentence.toLowerCase();
-        const score = queryWords.reduce((acc, word) => {
-          return acc + (sentenceWords.includes(word) ? 1 : 0);
-        }, 0);
-        return { sentence, score };
-      });
-
-      scoredSentences.sort((a, b) => b.score - a.score);
-      bestSentences = scoredSentences.slice(0, 3).map(item => item.sentence);
+    // If no context files specified, search all chunks
+    if (contextFiles.length === 0) {
+      relevantChunks = vectorStore.search(query, 5)
     }
 
-    const snippet = bestSentences.join(' ').substring(0, 200) + (bestSentences.join(' ').length > 200 ? '...' : '');
+    if (relevantChunks.length === 0) {
+      return {
+        response: "I don't have enough information from the uploaded documents to answer this question. Please upload relevant PDFs or ask about a different topic.",
+        citations: []
+      }
+    }
 
-    const citation = {
-      pageNumber: chunk.startPage || 1,
-      snippet: snippet.trim(),
-      documentName: chunk.documentName || 'Unknown Document'
-    };
+    // Generate response based on retrieved chunks
+    const contextText = relevantChunks.map(chunk => chunk.content).join('\n\n')
+    const citations = relevantChunks.map(chunk => ({
+      pages: chunk.pages,
+      snippet: chunk.content.substring(0, 150) + '...',
+      fileId: chunk.metadata.fileId
+    }))
 
-    console.log('Generated citation:', citation);
-    return citation;
+    // Create a contextual response (in a real implementation, this would use an LLM)
+    const response = `Based on the information I found in your documents:\n\n${contextText.substring(0, 300)}...\n\nThis information appears on pages ${citations.map(c => c.pages.join(', ')).join(', ')}.`
+
+    return {
+      response,
+      citations,
+      contextChunks: relevantChunks.length
+    }
 
   } catch (error) {
-    console.error('Error generating citation:', error);
-    // Return safe fallback
+    console.error('Error generating RAG response:', error)
     return {
-      pageNumber: 1,
-      snippet: 'Content citation unavailable.',
-      documentName: 'Document'
-    };
+      response: "I encountered an error while processing your question. Please try again.",
+      citations: []
+    }
   }
+}
+
+// Initialize vector store with uploaded files
+export async function initializeRAGWithFiles(uploadedFiles) {
+  vectorStore.clear()
+
+  for (const file of uploadedFiles) {
+    try {
+      await vectorStore.addDocument(file.id, file.url, {
+        fileName: file.name,
+        uploadDate: new Date().toISOString()
+      })
+    } catch (error) {
+      console.error(`Error processing file ${file.name}:`, error)
+    }
+  }
+
+  return vectorStore.getStats()
 }
