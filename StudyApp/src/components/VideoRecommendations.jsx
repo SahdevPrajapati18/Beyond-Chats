@@ -198,9 +198,45 @@ function VideoRecommendations({ uploadedFiles, selectedFile, isVisible = true })
         <div className="grid gap-3">
           {recommendations.recommendations.map((video, index) => (
             <div
-              key={video.id.videoId}
+              key={`${video.id?.videoId || 'demo'}-${index}`}
               className="flex gap-3 p-3 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors cursor-pointer"
-              onClick={() => window.open(`https://www.youtube.com/watch?v=${video.id.videoId}`, '_blank')}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+
+                // Try multiple ways to get video ID
+                let videoId = null;
+
+                // Method 1: Standard YouTube API format
+                if (video.id?.videoId) {
+                  videoId = video.id.videoId;
+                }
+                // Method 2: Alternative format
+                else if (video.id) {
+                  videoId = video.id;
+                }
+                // Method 3: Check if it's already a video ID string
+                else if (typeof video.id === 'string') {
+                  videoId = video.id;
+                }
+
+                console.log('Video clicked:', {
+                  title: video.snippet?.title || 'Unknown',
+                  videoId: videoId,
+                  fullVideoObject: video
+                });
+
+                if (videoId && videoId !== 'undefined' && videoId !== 'null') {
+                  const url = `https://www.youtube.com/watch?v=${videoId}`;
+                  console.log('Opening video URL:', url);
+                  window.open(url, '_blank');
+                } else {
+                  console.warn('No valid video ID found for:', video.snippet?.title || 'Unknown video');
+                  // For demo videos, you could show an alert or handle differently
+                  alert('Demo video - no link available');
+                }
+              }}
+              style={{ pointerEvents: 'auto' }}
             >
               {/* Thumbnail */}
               <div className="flex-shrink-0">
@@ -213,7 +249,7 @@ function VideoRecommendations({ uploadedFiles, selectedFile, isVisible = true })
                   }}
                 />
                 <div className="text-xs text-gray-500 dark:text-gray-400 mt-1 text-center">
-                  Demo Video
+                  {video.id?.videoId ? 'YouTube' : ''}
                 </div>
               </div>
 
