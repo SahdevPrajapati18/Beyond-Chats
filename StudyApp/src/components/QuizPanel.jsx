@@ -38,48 +38,46 @@ export default function QuizPanel({ quizId, questions, onRegenerate }) {
     setSubmitted(false)
   }, [questions])
 
-  // Memoized score calculation - only recalculate when dependencies change
-  const score = useMemo(() => {
-    if (!submitted || !questions.length) return 0
-
-    let correct = 0
+  const calculateScore = (questions, answers) => {
+    let correct = 0;
     for (const q of questions) {
-      if (q.type === 'mcq') {
-        const ans = answers[q.id]
-        if (typeof ans === 'number' && ans === q.answerIndex) correct += 1
-      } else if (q.type === 'saq' || q.type === 'laq') {
-        const ans = (answers[q.id] || '').toLowerCase()
-        const ref = (q.reference || q.explanation || '').toLowerCase()
-        if (ans && ref && ans.split(' ').slice(0, 4).some(t => ref.includes(t))) correct += 1
-      }
+        if (q.type === 'mcq') {
+            const ans = answers[q.id];
+            if (typeof ans === 'number' && ans === q.answerIndex) correct += 1;
+        } else if (q.type === 'saq' || q.type === 'laq') {
+            const ans = (answers[q.id] || '').toLowerCase();
+            const ref = (q.reference || q.explanation || '').toLowerCase();
+            if (ans && ref && ans.split(' ').slice(0, 4).some(t => ref.includes(t))) correct += 1;
+        }
     }
-    return correct
-  }, [submitted, answers, questions])
+    return correct;
+  };
 
-  // Memoized submit handler
+  const score = useMemo(() => {
+    if (!submitted) return 0;
+    return calculateScore(questions, answers);
+  }, [submitted, questions, answers]);
+
+
   const handleSubmit = useCallback(async () => {
-    setIsLoading(true)
-    setSubmitted(true)
+    setIsLoading(true);
+
+    const currentScore = calculateScore(questions, answers);
+    setSubmitted(true);
 
     const result = {
-      timestamp: Date.now(),
-      total: questions.length,
-      score,
-      answers,
-    }
+        timestamp: Date.now(),
+        total: questions.length,
+        score: currentScore,
+        answers,
+    };
 
-    // Save attempt asynchronously
-    saveAttempt(quizId, result)
+    saveAttempt(quizId, result);
+    setAttempts(prevAttempts => [result, ...prevAttempts].slice(0, 10));
+    recordQuizResult(questions, answers, currentScore);
 
-    // Update attempts state
-    const updatedAttempts = loadAttempts(quizId)
-    setAttempts(updatedAttempts)
-
-    // Record for progress tracking
-    recordQuizResult(questions, answers, score)
-
-    setIsLoading(false)
-  }, [quizId, questions, score, answers])
+    setIsLoading(false);
+  }, [quizId, questions, answers]);
 
   // Memoized answer handler for better performance
   const handleAnswerChange = useCallback((questionId, value) => {
