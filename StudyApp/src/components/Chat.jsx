@@ -36,16 +36,63 @@ const BotIcon = () => (
 );
 
 const ChatPanel = ({ isVisible, onToggle, uploadedFiles = [] }) => {
-  const [chats, setChats] = useState([
-    { id: 1, title: "Study Session 1", messages: [], lastMessage: "Hello! I'm your virtual teacher..." },
-    { id: 2, title: "Math Help", messages: [], lastMessage: "Let's solve that equation together!" }
-  ]);
-  const [currentChatId, setCurrentChatId] = useState(1);
+  const [chats, setChats] = useState([]);
+  const [currentChatId, setCurrentChatId] = useState(null);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [ragInitialized, setRagInitialized] = useState(false);
   const messagesEndRef = useRef(null);
+
+  // Load chat state from localStorage on initial render
+  useEffect(() => {
+    let loadedState;
+    try {
+      const savedState = localStorage.getItem('chatState');
+      if (savedState) {
+        loadedState = JSON.parse(savedState);
+      }
+    } catch (e) {
+      console.error("Could not load chat state from local storage", e);
+    }
+
+    if (loadedState) {
+      // Revive Date objects from stringified JSON
+      loadedState.chats.forEach(chat => {
+        chat.messages.forEach(msg => {
+          msg.timestamp = new Date(msg.timestamp);
+        });
+      });
+      setChats(loadedState.chats);
+      setCurrentChatId(loadedState.currentChatId);
+      setSidebarCollapsed(loadedState.sidebarCollapsed || false);
+    } else {
+      // Set default state if nothing is in localStorage
+      const defaultChats = [
+        { id: 1, title: "Study Session 1", messages: [], lastMessage: "Hello! I'm your virtual teacher..." },
+        { id: 2, title: "Math Help", messages: [], lastMessage: "Let's solve that equation together!" }
+      ];
+      setChats(defaultChats);
+      setCurrentChatId(1);
+    }
+  }, []);
+
+  // Save chat state to localStorage whenever it changes
+  useEffect(() => {
+    if (chats.length === 0 || currentChatId === null) {
+      return; // Don't save the initial empty state before it's loaded
+    }
+    try {
+      const stateToSave = {
+        chats,
+        currentChatId,
+        sidebarCollapsed
+      };
+      localStorage.setItem('chatState', JSON.stringify(stateToSave));
+    } catch (e) {
+      console.error("Could not save chat state to local storage", e);
+    }
+  }, [chats, currentChatId, sidebarCollapsed]);
 
   const currentChat = chats.find(chat => chat.id === currentChatId) || chats[0];
 
